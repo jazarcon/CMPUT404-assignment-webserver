@@ -26,10 +26,6 @@ import socketserver
 
 # try: curl -v -X GET http://127.0.0.1:8080/
 
-# TODO:
-
-# [ ] The webserver can pass all the tests in not-free-tests.py (you only have part of this one, I reserve the right to add tests)
-
 import os
 
 class MyWebServer(socketserver.BaseRequestHandler):   
@@ -75,20 +71,7 @@ class MyWebServer(socketserver.BaseRequestHandler):
             self.request.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
         
         else: 
-                # does not have / and is a directory
-                slash_path= request_path + '/'
-                response= f"HTTP/1.1 301 Moved Permanently\r\n Location: {slash_path}\r\n\r\n".encode()
-                self.request.sendall(response) 
-
-                new_path= os.path.join(rootDir, slash_path.lstrip('/'))
-
-                if os.path.isfile(new_path):
-                    self.serveFile(new_path)
-                elif os.path.isdir(new_path):
-                    self.serveDirect(new_path)
-                else:
-                    self.request.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
-    
+            self.request.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
 
     
     # function as part of cleanned up refactory code from ChatGPT, 
