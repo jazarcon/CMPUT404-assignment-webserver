@@ -27,16 +27,9 @@ import socketserver
 # try: curl -v -X GET http://127.0.0.1:8080/
 
 # TODO:
-# 
-# [ ] The webserver can return index.html from directories (paths that end in /)
 
 # [ ] The webserver can pass all the tests in not-free-tests.py (you only have part of this one, I reserve the right to add tests)
 
-# [ ] I can check out the source code via an HTTP git URL
-
-import http.server
-import http
-import string
 import os
 
 class MyWebServer(socketserver.BaseRequestHandler):   
@@ -47,58 +40,86 @@ class MyWebServer(socketserver.BaseRequestHandler):
         # self.request.sendall(bytearray("OK",'utf-8'))
 
         # break down resquest string
-        request_str = self.data.decode('utf-8')         # decode binary
-        request_lines = request_str.split('\r\n')       # split into individual lines
-        request_method = request_lines[0].split()[0]    # get method
-        request_path = request_lines[0].split()[1]      # get path
+        request_str= self.data.decode('utf-8')          # decode binary
+        request_lines= request_str.split('\r\n')        # split into individual lines
+        request_method= request_lines[0].split()[0]     # get method
+        request_path= request_lines[0].split()[1]       # get path
 
+        # root directory
+        rootDir= './www'
+        file_path= os.path.join(rootDir, request_path.lstrip('/'))
 
         if request_method == 'GET':
-            if request_path == '/':
-                # Serve index.html page
-                html_content = open('./www/index.html', 'rb').read()
-                response = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + html_content
-                self.request.sendall(response)
+            if not request_path.endswith('/') and os.path.isdir(file_path):
+                # does not have / and is a directory
+                slash_path= request_path + '/'
+                response= f"HTTP/1.1 301 Moved Permanently\r\n Location: {slash_path}\r\n\r\n".encode()
+                self.request.sendall(response) 
+
+                new_file_path= os.path.join(rootDir, slash_path.lstrip('/'))
+                self.serveDirect(new_file_path)
             
+            if os.path.isdir(file_path):
+                # if path leads to a directory
+                self.serveDirect(file_path)
 
-            elif not request_path.endswith('/'):
-                new_path= request_path + '/'
-                self.request.sendall(f"HTTP/1.1 301 Moved Permenately\r\n Location:{new_path}\r\n\r\n".encode())
-
-                print(new_path)
-                print('html' not in request_path)
-                if 'html' not in request_path:
-                    new_content= open('www' + new_path + "index.html")
-                else:
-                    new_content= open('www' + new_path)
-
-                data= new_content.read()
-                self.request.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + data.encode('utf-8'))
-
+            elif os.path.isfile(file_path):
+                # if path leads to just a file
+                self.serveFile(file_path)
 
             else:
-                # Serve CSS files
-                file_path = './www' + request_path
-                if os.path.exists(file_path):
-                    with open(file_path, 'rb') as file:
-                        content = file.read()
-                        content_type = 'text/css' if request_path.endswith('.css') else 'text/plain'
-                        response = f"HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\n\r\n".encode() + content
-                        self.request.sendall(response)
-                
+                self.request.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
+
+        elif request_method== 'POST' or request_method == 'PUT' or request_method == 'DELETE':
+            # for any other method ( Ex. POST, PUT, DELETE)
+            self.request.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
+        
+        else: 
+                # does not have / and is a directory
+                slash_path= request_path + '/'
+                response= f"HTTP/1.1 301 Moved Permanently\r\n Location: {slash_path}\r\n\r\n".encode()
+                self.request.sendall(response) 
+
+                new_path= os.path.join(rootDir, slash_path.lstrip('/'))
+
+                if os.path.isfile(new_path):
+                    self.serveFile(new_path)
+                elif os.path.isdir(new_path):
+                    self.serveDirect(new_path)
                 else:
-                    # Return a 404 error if the file does not exist
                     self.request.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
-            
+    
 
+    
+    # function as part of cleanned up refactory code from ChatGPT, 
+    # 'which parts of the code i sent before are repeating' 2023-09-29
+    def serveFile(self, file_path):
+        # find content type- support mime types
+        if file_path.endswith('.html'):
+            content_type= 'text/html'
+        elif file_path.endswith('.css'):
+            content_type= 'text/css'
+        else: 
+            # if not html or css
+            self.request.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n") 
 
-        elif request_method == 'POST' or request_method == 'PUT' or request_method == 'DELETE':
-            # Handle for other methods that cannot be handled
-            self.request.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
+        with open(file_path, 'rb') as file:
+                # read whats in the file then send response
+                content = file.read()
+                response = f"HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\n\r\n".encode() + content
+                self.request.sendall(response)  
 
+    # function as part of cleanned up refactory code from ChatGPT, 
+    # 'which parts of the code i sent before are repeating' 2023-09-29    
+    def serveDirect(self, file_path):
+        # go to directory's index.html
+        index_path= os.path.join(file_path, 'index.html')
+        if os.path.exists(index_path):
+             # to serve index.html content
+             self.serveFile(index_path)
         else:
-            # Handle other request methods or return a 404 error
-            self.request.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
+            # if directory doesn't have index.html (not in this case but im paranoid)
+            self.request.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n") 
 
 
 if __name__ == "__main__":
